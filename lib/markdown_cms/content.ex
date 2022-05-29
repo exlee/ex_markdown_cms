@@ -11,7 +11,6 @@ defmodule MarkdownCMS.Content do
     )
 
     with_extras(parsed, file)
-    |> IO.inspect
   end
 
 
@@ -55,13 +54,14 @@ defmodule MarkdownCMS.Content do
     end
   end
 
-  def all() do
+  def all(opts \\ []) do
     File.ls!(location)
     |> Enum.map(&( Path.join(location, &1)))
     |> Enum.map(&unpack_files/1)
     |> List.flatten
     |> Enum.filter(&markdown_only/1)
     |> Enum.map(&parse/1)
+    |> return_grouped(Map.new(opts))
   end
 
   defp remove_extension(file_name) do
@@ -88,11 +88,20 @@ defmodule MarkdownCMS.Content do
     String.ends_with?(String.downcase(file), ".md")
   end
 
+  defp return_grouped(data, %{group_by: key}) do
+    data
+    |> Enum.group_by(&(Keyword.get(&1, key)))
+  end
+  defp return_grouped(data, _options), do: data
+
+
+  @special_keys [:group_by]
   def query(query) do
-    query_map = Map.new(query)
+    {options, query_map} = Map.new(query) |> Map.split(@special_keys)
 
     all()
     |> Enum.filter(&(match_item(&1, query_map)))
+    |> return_grouped(options)
   end
 
   def match_item(item, query_map) do
@@ -102,7 +111,6 @@ defmodule MarkdownCMS.Content do
   end
 
   def find(query) do
-
     query(query)
     |> List.first
   end

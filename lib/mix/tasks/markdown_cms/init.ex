@@ -6,7 +6,6 @@ defmodule Mix.Tasks.MarkdownCms.Init do
 
   @impl Mix.Task
   def run(_args) do
-    IO.inspect(File.cwd!)
     Mix.Generator.copy_file(Path.join(Mix.Project.deps_paths().markdown_cms, "source/view.ex"), "lib/markdown_cms/view.ex")
 
     templates_path = Path.join(Mix.Project.deps_paths().markdown_cms, "source/templates")
