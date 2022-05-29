@@ -54,13 +54,17 @@ defmodule MarkdownCMS.Content do
     end
   end
 
-  def all(opts \\ []) do
+  def initialize_all do
     File.ls!(location)
     |> Enum.map(&( Path.join(location, &1)))
     |> Enum.map(&unpack_files/1)
     |> List.flatten
     |> Enum.filter(&markdown_only/1)
     |> Enum.map(&parse/1)
+  end
+
+  def all(opts \\ []) do
+    initialize_all
     |> return_grouped(Map.new(opts))
   end
 
