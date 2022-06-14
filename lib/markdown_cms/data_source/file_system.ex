@@ -2,26 +2,82 @@ defmodule MarkdownCMS.DataSource.FileSystem do
   require Logger
   @behaviour MarkdownCMS.Inner.DataProvider
 
-  @default_documents_location "markdown_cms/content/"
-  def location do
-    Application.get_env(:markdown_cms, :documents_location, @default_documents_location)
-  end
-
-  @default_content_tags [:title, :date, :locale, :type, :category, :slug, :tag]
-  defp content_tags do
-    Application.get_env(:markdown_cms, :content_tags, @default_content_tags)
-  end
-
   @impl true
-  def load do
-    Logger.debug("Load data from filesystem")
+  def load(pid \\ __MODULE__) do
+    if debug?(pid) do
+      Logger.debug("Loading from filesystem")
+      Agent.get(pid, fn state -> load_from_filesystem(state) end)
+    else
+      Logger.debug("Loading from Agent")
+      Agent.get(pid, fn state -> state.data end)
+    end
+  end
 
-    File.ls!(location())
-    |> Enum.map(&( Path.join(location(), &1)))
+  def reload(pid \\ __MODULE__) do
+    Logger.debug("Reloading filesystem")
+
+    Agent.get_and_update(pid, fn state ->
+      Map.put(state, :data, load_from_filesystem(state))
+    end)
+  end
+
+  @spec load_from_filesystem(options_map()) :: any
+  def load_from_filesystem(options) do
+
+    File.ls!(options.documents_location)
+    |> Enum.map(&( Path.join(options.documents_location, &1)))
     |> Enum.map(&unpack_files/1)
     |> List.flatten
     |> Enum.filter(&markdown_only/1)
-    |> Enum.map(&parse/1)
+    |> Enum.map(&(parse(options, &1)))
+  end
+
+  use Agent
+
+  @default_name __MODULE__
+
+  @default_options %{
+    documents_location: "markdown_cms/content/",
+    content_tags: [:title, :date, :locale, :type, :category, :slug, :tag],
+    debug: false
+  }
+
+  @type options() :: [option()]
+  @type option() ::
+            {:content_tags, [atom(), ...]}
+            | {:documents_location, String.t}
+            | {:debug, bool()}
+            | {:name, atom()}
+
+  @type options_map() :: %{
+    content_tags: [atom(), ...],
+    documents_location: String.t,
+    debug: bool()
+  }
+
+
+  @spec start_link(options()) :: Agent.on_start()
+  def start_link(opts) do
+    options_map = Map.new(opts)
+    |> Map.take([:content_tags, :documents_location, :debug])
+    |> then(&(Map.merge(@default_options, &1)))
+    |> ensure_trailing_slash()
+
+    data = load_from_filesystem(options_map)
+
+    Agent.start_link(
+      fn -> Map.put(options_map, :data, data) end,
+      name: Keyword.get(opts, :name, @default_name)
+    )
+  end
+
+  defp ensure_trailing_slash(options_map) do
+    location = options_map.documents_location
+    unless String.ends_with?(location, "/") do
+      %{options_map | documents_location: location <> "/"}
+    else
+      options_map
+    end
   end
 
   defp markdown_only(file) do
@@ -42,14 +98,26 @@ defmodule MarkdownCMS.DataSource.FileSystem do
     |> List.first
   end
 
-  def parse(file) do
+
+  def parse(options, file) do
     parsed = SemanticMarkdown.transform_from_file!(
       file,
-      content_tags(),
+      options.content_tags,
       earmark_inner_transform: false
     )
 
-    with_extras(parsed, file)
+    with_extras(options, parsed, file)
+  end
+
+  def debug?(pid) do
+    Agent.get(pid, fn state -> state.debug end)
+  end
+  def data(pid) do
+    Agent.get(pid, fn state -> state.data end)
+  end
+
+  defp check_for_duplicate_ids(keys, options) do
+    IO.inspect(keys)
   end
 
   defp slugify(file_name) do
@@ -66,7 +134,7 @@ defmodule MarkdownCMS.DataSource.FileSystem do
     end
   end
 
-  defp add_type({parsed, split_path}) when length(split_path) == 2 do
+  defp add_type({parsed, split_path}) when length(split_path) >= 2 do
     if Keyword.has_key?(parsed, :type) do
       {parsed, split_path}
     else
@@ -76,12 +144,12 @@ defmodule MarkdownCMS.DataSource.FileSystem do
   defp add_type(value), do: value
 
   defp add_type_tree({parsed, split_path}) when length(split_path) > 2 do
-      {parsed ++ [type_tree: Enum.slice(split_path, 0..-1)], split_path}
+      {parsed ++ [type_tree: Enum.slice(split_path, 0..-2)], split_path}
   end
   defp add_type_tree(value), do: value
 
-  defp with_extras(parsed, path) do
-    split_path = Path.split(String.replace(path, location(), ""))
+  defp with_extras(options, parsed, path) do
+    split_path = Path.split(String.replace(path, options.documents_location, ""))
 
     {parsed, split_path}
     |> add_slug()

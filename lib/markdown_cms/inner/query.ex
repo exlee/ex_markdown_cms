@@ -44,9 +44,9 @@ defmodule MarkdownCMS.Inner.Query do
       def get(id) do
         query([{id_field(), id}])
         |> case do
-             [] -> :error
-             nil -> :error
+             [] -> {:error, :not_found}
              [value] -> {:ok, value}
+             _ -> {:error, :multiple_found}
            end
       end
 
@@ -57,7 +57,8 @@ defmodule MarkdownCMS.Inner.Query do
       def get!(id) do
         case get(id) do
           {:ok, value} -> value
-          :error -> raise "Item with #{id_field()} == #{inspect(id)} not found!"
+          {:error, :not_found} -> raise "Item with #{id_field()} == #{inspect(id)} not found!"
+          {:error, :multiple_found} -> raise "Multiple items with #{id_field()} == #{inspect(id)} found."
         end
       end
 

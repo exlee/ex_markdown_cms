@@ -2,11 +2,16 @@ defmodule MarkdownCMS.QueryTest do
   use ExUnit.Case
 
   def sample_data() do
-    [[content: "Content", title: "Title A", category: "Category A", slug: "a"],
+    [
+      [content: "Content", title: "Title A", category: "Category A", slug: "a"],
       [content: "Content", title: "Title B", category: "Category B"],
       [content: "Content", title: "Title C", category: "Category A", slug: "c"],
       [content: "Content", title: "Title D", category: "Category B"],
-      [content: "Content", title: "Title E", category: "Category A"]]
+      [content: "Content", title: "Title E", category: "Category A"],
+      [content: "Content", title: "Title F", category: "Category C", slug: "duplicate-slug"],
+      [content: "Content", title: "Title G", category: "Category C", slug: "duplicate-slug"],
+
+    ]
   end
 
   defmodule Query do
@@ -46,11 +51,21 @@ defmodule MarkdownCMS.QueryTest do
   end
 
   test "get should not raise when data is not found" do
-    assert Query.get("unknown") == :error
+    assert Query.get("unknown") == {:error, :not_found}
   end
 
   test "get with existing id should return wrapped in {:ok, _}" do
     assert Query.get("c") == {:ok, [content: "Content", title: "Title C", category: "Category A", slug: "c"]}
+  end
+
+  test "get returning multiple queries should return an error" do
+    assert Query.get("duplicate-slug") == {:error, :multiple_found}
+  end
+
+  test "get! returning multiple queries should raise" do
+    assert_raise RuntimeError, fn ->
+      Query.get!("duplicate-slug") == {:error, :multiple_found}
+    end
   end
 
 end

@@ -6,7 +6,7 @@ defmodule MarkdownCMS.Application do
   @impl true
   def start(_, _) do
     children = [
-      MarkdownCMS.DataAgent
+   #   MarkdownCMS.DataSource.FileSystem
     ]
 
     opts = [strategy: :one_for_one, name: MarkdownCMS.Supervisor]
